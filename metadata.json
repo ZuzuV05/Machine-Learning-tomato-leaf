@@ -1,0 +1,6 @@
+{
+  "name": "Tomato Leaf Disease Classifier",
+  "description": "Tomato leaf disease classification system using TensorFlow.js with MobileNetV2 preprocessing to detect plant disease instantly.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

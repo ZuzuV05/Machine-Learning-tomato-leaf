@@ -108,9 +108,86 @@ const DISEASE_METADATA: Record<string, DiseaseDetails> = {
   }
 };
 
+// Helper to extract keras history arrays from a Keras 3 call node object (args/kwargs)
+function extractKerasHistory(obj: any): any[] {
+  if (!obj) return [];
+  
+  if (Array.isArray(obj)) {
+    let result: any[] = [];
+    for (const item of obj) {
+      result = result.concat(extractKerasHistory(item));
+    }
+    return result;
+  }
+  
+  if (typeof obj === 'object') {
+    if (obj.class_name === '__keras_tensor__' && obj.config && Array.isArray(obj.config.keras_history)) {
+      return [obj.config.keras_history];
+    }
+    if (Array.isArray(obj.keras_history)) {
+      return [obj.keras_history];
+    }
+    
+    let result: any[] = [];
+    for (const key of Object.keys(obj)) {
+      result = result.concat(extractKerasHistory(obj[key]));
+    }
+    return result;
+  }
+  
+  return [];
+}
+
+// Convert Keras 3 inbound_nodes (list of call objects) to Keras 2 style (nested arrays)
+function fixInboundNodes(inboundNodes: any): any {
+  if (!Array.isArray(inboundNodes)) return inboundNodes;
+  
+  const isKeras3 = inboundNodes.some(node => node && typeof node === 'object' && !Array.isArray(node));
+  
+  if (isKeras3) {
+    return inboundNodes.map(callNode => {
+      if (!callNode || typeof callNode !== 'object' || Array.isArray(callNode)) {
+        return callNode;
+      }
+      const histories = extractKerasHistory(callNode);
+      return histories.map(hist => {
+        if (Array.isArray(hist) && hist.length >= 3) {
+          return [hist[0], hist[1], hist[2], {}];
+        }
+        return hist;
+      });
+    });
+  }
+  
+  return inboundNodes;
+}
+
+// Recursive helper to traverse the model topology JSON and fix compatibility issues
+function fixModelTopology(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => fixModelTopology(item));
+  }
+  
+  const result: any = {};
+  for (const key of Object.keys(obj)) {
+    if (key === 'batch_shape' && Array.isArray(obj[key])) {
+      result['batchInputShape'] = obj[key];
+    }
+    
+    if (key === 'inbound_nodes' && Array.isArray(obj[key])) {
+      result[key] = fixInboundNodes(obj[key]);
+    } else {
+      result[key] = fixModelTopology(obj[key]);
+    }
+  }
+  return result;
+}
+
 export default function Home() {
   const [isTfLoaded, setIsTfLoaded] = useState(false);
-  const [modelUrl, setModelUrl] = useState('https://raw.githubusercontent.com/sachinsharma9/tomato-disease-classification-tfjs/master/model/model.json');
+  const [modelUrl, setModelUrl] = useState('https://raw.githubusercontent.com/ZuzuV05/Machine-Learning-tomato-leaf/refs/heads/main/tomato_disease_MobileNetV2_tfjs/model.json');
   const [modelType, setModelType] = useState<'layers' | 'graph'>('layers');
   const [isModelLoading, setIsModelLoading] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
@@ -162,7 +239,38 @@ export default function Home() {
       
       let loadedModel;
       if (modelType === 'layers') {
-        loadedModel = await tf.loadLayersModel(modelUrl);
+        // Intercept loading to fix Keras 3 compatibility issues where batch_shape is used instead of batchInputShape
+        const getBrowserLoader = (tfInstance: any, url: string) => {
+          if (tfInstance.io.browserHTTPRequest) {
+            return tfInstance.io.browserHTTPRequest(url);
+          } else if (tfInstance.io.browserHttpRequest) {
+            return tfInstance.io.browserHttpRequest(url);
+          } else {
+            throw new Error("No browser HTTP request loader found in TensorFlow.js");
+          }
+        };
+        const defaultLoader = getBrowserLoader(tf, modelUrl);
+        const customLoader = {
+          load: async () => {
+            const artifacts = await defaultLoader.load();
+            if (artifacts.modelTopology) {
+              let topology = artifacts.modelTopology;
+              if (typeof topology === 'string') {
+                try {
+                  const parsed = JSON.parse(topology);
+                  const fixed = fixModelTopology(parsed);
+                  artifacts.modelTopology = JSON.stringify(fixed);
+                } catch (e) {
+                  console.error("Failed to parse and fix modelTopology string:", e);
+                }
+              } else {
+                artifacts.modelTopology = fixModelTopology(topology);
+              }
+            }
+            return artifacts;
+          }
+        };
+        loadedModel = await tf.loadLayersModel(customLoader as any);
       } else {
         loadedModel = await tf.loadGraphModel(modelUrl);
       }
@@ -291,7 +399,8 @@ export default function Home() {
           // Expand dimensions to [1, 224, 224, 3]
           const expandedTensor = imageTensor.expandDims(0);
           
-          // Cast to Float32 and normalize to [-1, 1] (MobileNetV2 preprocessing)
+          // Cast to Float32 and normalize to [-1, 1] (MobileNetV2 standard: pixel = (pixel / 127.5) - 1.0)
+          // This is strictly used instead of dividing by 255.0 to ensure correct model inference
           const floatTensor = expandedTensor.toFloat();
           const preprocessed = floatTensor.div(127.5).sub(1.0);
 

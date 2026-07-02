@@ -180,7 +180,6 @@ for (const key of Object.keys(obj)) {
     result[key] = fixModelTopology(obj[key]);
   }
 }
-  }
   return result;
 }
 

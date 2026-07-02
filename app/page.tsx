@@ -158,8 +158,8 @@ function fixInboundNodes(inboundNodes: any): any {
     return node;
   });
 }
-  return inboundNodes;
-}
+
+
 
 // Recursive helper to traverse the model topology JSON and fix compatibility issues
 function fixModelTopology(obj: any): any {
@@ -169,17 +169,17 @@ function fixModelTopology(obj: any): any {
     return obj.map(item => fixModelTopology(item));
   }
   
-  const result: any = {};
-  for (const key of Object.keys(obj)) {
-    if (key === 'batch_shape' && Array.isArray(obj[key])) {
-      result['batchInputShape'] = obj[key];
-    }
-    
-    if (key === 'inbound_nodes' && Array.isArray(obj[key])) {
-      result[key] = fixInboundNodes(obj[key]);
-    } else {
-      result[key] = fixModelTopology(obj[key]);
-    }
+const result: any = {};
+for (const key of Object.keys(obj)) {
+  if (key === 'batch_shape' && Array.isArray(obj[key])) {
+    result['batchInputShape'] = obj[key];
+    // Tidak tambahkan batch_shape ke result
+  } else if (key === 'inbound_nodes' && Array.isArray(obj[key])) {
+    result[key] = fixInboundNodes(obj[key]);
+  } else {
+    result[key] = fixModelTopology(obj[key]);
+  }
+}
   }
   return result;
 }

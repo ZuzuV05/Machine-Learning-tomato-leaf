@@ -187,7 +187,7 @@ function fixModelTopology(obj: any): any {
 
 export default function Home() {
   const [isTfLoaded, setIsTfLoaded] = useState(false);
-  const [modelUrl, setModelUrl] = useState('https://raw.githubusercontent.com/ZuzuV05/Machine-Learning-tomato-leaf/refs/heads/main/tomato_disease_MobileNetV2_tfjs/model.json');
+  const [modelUrl, setModelUrl] = useState('/model/model.json');
   const [modelType, setModelType] = useState<'layers' | 'graph'>('layers');
   const [isModelLoading, setIsModelLoading] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);

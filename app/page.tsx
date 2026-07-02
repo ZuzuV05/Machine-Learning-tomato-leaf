@@ -142,23 +142,22 @@ function extractKerasHistory(obj: any): any[] {
 function fixInboundNodes(inboundNodes: any): any {
   if (!Array.isArray(inboundNodes)) return inboundNodes;
   
-  const isKeras3 = inboundNodes.some(node => node && typeof node === 'object' && !Array.isArray(node));
-  
-  if (isKeras3) {
-    return inboundNodes.map(callNode => {
-      if (!callNode || typeof callNode !== 'object' || Array.isArray(callNode)) {
-        return callNode;
-      }
-      const histories = extractKerasHistory(callNode);
+  return inboundNodes.map(node => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return node;
+    
+    // Keras 3 format: node has 'args' key containing __keras_tensor__ objects
+    if ('args' in node || 'kwargs' in node) {
+      const histories = extractKerasHistory(node);
       return histories.map(hist => {
         if (Array.isArray(hist) && hist.length >= 3) {
           return [hist[0], hist[1], hist[2], {}];
         }
         return hist;
       });
-    });
-  }
-  
+    }
+    return node;
+  });
+}
   return inboundNodes;
 }
 
@@ -710,7 +709,7 @@ export default function Home() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
-                        setModelUrl('https://raw.githubusercontent.com/sachinsharma9/tomato-disease-classification-tfjs/master/model/model.json');
+                        setModelUrl('/model/model.json');
                         setModelType('layers');
                       }}
                       className="px-2.5 py-1 text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
